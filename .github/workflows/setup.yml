@@ -1,0 +1,63 @@
+name: ML Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m venv myenv
+          source myenv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Check dataset changes and retrain if needed
+        run: |
+          source myenv/bin/activate
+          python train.py
+          echo "EC2_USER: $EC2_USER"
+          echo "EC2_HOST: $EC2_HOST"
+
+      - name: Deploy Model to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}  # Ensure these are set correctly in GitHub Secrets
+          EC2_USER: ${{ secrets.EC2_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          # Save the SSH key and fix any potential issues with carriage returns
+          echo "$SSH_KEY" | tr -d '\r' > Flaskapp.pem
+          chmod 600 Flaskapp.pem
+
+          # Create the .ssh directory if it doesn't exist
+          mkdir -p ~/.ssh
+
+          # Automatically add the EC2 host to the known_hosts file without user interaction
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+
+          # Debugging - Check environment variables
+          echo "EC2_USER: $EC2_USER"
+          echo "EC2_HOST: $EC2_HOST"
+          
+          # Verify the SSH key
+          cat Flaskapp.pem
+          
+          # Ensure folder exists on EC2
+          ssh -i Flaskapp.pem $EC2_USER@$EC2_HOST '[ -d "/home/$EC2_USER/models" ] || sudo mkdir -p /home/$EC2_USER/models'
+          
+          # Copy model file to EC2
+          scp -i Flaskapp.pem models/model_*.pkl $EC2_USER@$EC2_HOST:/home/$EC2_USER/models/
+          
