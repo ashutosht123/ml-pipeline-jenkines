@@ -1,9 +1,4 @@
 pipeline {
-    agent {
-        docker {
-            image 'python:3.10-slim'  // Use a Python 3.10 Docker image
-        }
-    }
     environment {
         EC2_HOST = credentials('EC2_HOST')  // Store EC2_HOST in Jenkins credentials
         EC2_USER = credentials('EC2_USER')  // Store EC2_USER in Jenkins credentials
